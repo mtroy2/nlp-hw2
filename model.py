@@ -30,13 +30,9 @@ class Uniform(object):
 
         for line in open(filename):
             line.replace('\n',' ')
-            line_tokens = []
-            for w in line:
-                # tokenize line
-                line_tokens.append(w)
             # form all ngrams from line
             for i in range(1,self.ngrams+1):
-                ngrams_list = nltk.ngrams(line_tokens, i)
+                ngrams_list = nltk.ngrams(line, i)
                 # add to ngram dictionary
                 for entry in ngrams_list:
                     if entry not in self.grams[i]:
@@ -68,26 +64,25 @@ class Uniform(object):
     def probs(self):
         """Returns a dict mapping from all characters in the vocabulary to the
 probabilities of each character."""
-        for dict_number,gram_dict in self.grams.items():
-            for g, count in gram_dict.items():
-                self.prob_dict[dict_number][g] = count / (sum(gram_dict.values())+1)
-       
-        for key,value in self.prob_dict[1].items():
-            print(str(key) + ' -> ' + str(value))
-
-
+        pass
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
     parser.add_argument(dest='train')
+    parser.add_argument(dest='ngrams')
     args = parser.parse_args()
 
     ##### Replace this line with an instantiation of your model #####
-    ngrams = 2
-    m = Uniform(ngrams)
-    m.train(args.train)
-    m.start()
+    try:
+        ngrams = int(args.ngrams)
+        m = Uniform(int(args.ngrams))
+        m.train(args.train)
+        m.start()
+
+    except ValueError:
+        print("Error: Invalid ngram argument. Please enter an integer argument")
+        
 
     #root = tk.Tk()
     #app = Application(m, master=root)
