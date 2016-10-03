@@ -13,25 +13,36 @@ class Uniform(object):
 
         for i in range(0,ngrams):  
             self.grams[i+1]     = {}
-
+            self.prob_dict[i+1] = {}
     def train(self, filename):
         """Train the model on a text file."""
 
         for line in open(filename):
-
+            line.replace('\n',' ')
+            line = '`'*(self.ngrams-1) + line
             # form all ngrams from line
             for i in range(1,self.ngrams+1):
-                line.replace('\n',' ')
-                line = '`'*(i-1) + line
+
                 ngrams_list = nltk.ngrams(line, i)
                 # add to ngram dictionary
                 for entry in ngrams_list:
-                    if entry not in self.grams[i]:
-                        # add to dictionary / build vocabulary
-                        self.grams[i][''.join(entry)] = 1.
+                    if len(entry) == 1:
+                        context = ''
                     else:
-                        self.grams[i][entry] += 1.
-        
+                        context = ''.join(entry[0:len(entry)-1])
+                    letter = ''.join(entry[len(entry)-1])
+
+                    if context in self.grams[i].keys():
+                        if letter in self.grams[i][context].keys():
+                            self.grams[i][context][letter] += 1.
+                        else:
+                            self.grams[i][context][letter] = 1.
+                    else:
+                        self.grams[i][context] = {}
+                        self.grams[i][context][letter] = 1
+                        # add to dictionary / build vocabulary
+
+        return
     def compute_dev(self, filename):
         """ Read in a file, predict most probably char for each char position in file """
 
@@ -41,6 +52,7 @@ class Uniform(object):
         ten_pos.replace('\n',' ')
         # append start symbols handled in self.start()
         self.compute(ten_pos)
+        return
     def compute_test(self,filename):
 
         test_set = open(filename)
@@ -48,6 +60,7 @@ class Uniform(object):
         f_str = test_set.read()
         f_str.replace('\n',' ')
         self.compute(f_str)
+        return
     def compute(self,f_string):
         correct = 0
         incorrect = 0
@@ -61,73 +74,80 @@ class Uniform(object):
             print("Current accuracy< " + str(correct/(correct+incorrect) ) + " >")
             self.read(char)
         print( 'Accuracy = ' + str( correct / (incorrect + correct) ) )
-            
+        return
     def predict(self):
         """ Returns char with highest probability given current state """
         #print("state<" + self.state + ">")
 
         max_prob = 0.
         ret_pair = ['',0.]
+        if self.ngrams == 1:
+            context = "" 
+        else:
+            context = self.state[(len(self.state))-(self.ngrams-1):]
         for char in self.chars:
-            if self.ngrams == 1:
-                prior = "" 
-            else:
-                prior = self.state[(len(self.state))-(self.ngrams-1):]
-           
-            prob = self.recurse_smooth(char, prior, self.ngrams)
-            
-            #print("Char<" + char + ">, Prob<" + str(prob) + ">")
+
+            prob = self.recurse_smooth(char, context, self.ngrams)
+
             if prob > max_prob:
                 max_prob = prob
                 ret_pair = [char,prob]
         return ret_pair[0],ret_pair[1]
-    def recurse_smooth(self,char, prior,dict_num):
+
+    def recurse_smooth(self,char, context,dict_num):
         """ Computes recursively p(w | u) """
 
-        if (prior+char) in self.prob_dict.keys():
-            return self.prob_dict[prior+char]
+        if context in self.prob_dict[dict_num].keys():
+            if char in self.prob_dict[dict_num][context].keys():
+                return self.prob_dict[dict_num][context][char]
+        else:
+            self.prob_dict[dict_num][context] = {}
+        
+        # unigram
+        if context == "":
+            self.prob_dict[dict_num][context][char] = self.unigram_prob(char) 
+            return self.prob_dict[dict_num][context][char]
 
-        if len(prior) == 0:
-            self.prob_dict[char] = self.unigram_prob(char) 
-            return self.prob_dict[char]
 
-        c_u_dot,lam = self.lambda_compute(prior, dict_num)
-        if (prior+char) not in self.grams[dict_num].keys():
+        c_u_dot,lam = self.lambda_compute(context, dict_num)
+        if context in self.grams[dict_num].keys():
+            if char in self.grams[dict_num][context].keys():
+                c_u_w = self.grams[dict_num][context][char]
+            else:
+                c_u_w = 0
+        else:
             c_u_w = 0
+        if len(context) == 1:
+            new_context = ""
         else:
-            c_u_w = self.grams[dict_num][prior + char]
-
-        if len(prior) == 1:
-            new_prior = ""
-        else:
-            new_prior = prior[1:]
+            new_context = context[1:]
         if c_u_dot == 0:
-                self.prob_dict[prior+char] =(0 + (1.-lam)*self.recurse_smooth(char,new_prior,dict_num-1))   
-                return self.prob_dict[prior+char] 
+                self.prob_dict[dict_num][context][char] =(0 + (1.-lam)*self.recurse_smooth(char,new_context,dict_num-1))   
+                return self.prob_dict[dict_num][context][char] 
         else: 
-                self.prob_dict[prior+char] =((lam*c_u_w/c_u_dot) + (1.-lam)*self.recurse_smooth(char,new_prior,dict_num-1))
-                return self.prob_dict[prior+char]
+                self.prob_dict[dict_num][context][char] =((lam*c_u_w/c_u_dot) + (1.-lam)*self.recurse_smooth(char,new_context,dict_num-1))
+                return self.prob_dict[dict_num][context][char]
 
     def unigram_prob(self,char):
         """ Returns unigram prob of one single char in model """
 
-        char_count = sum(self.grams[1].values())
-        vocab_len = len(self.grams[1].keys())
+        char_count = sum(self.grams[1][""].values())
+        vocab_len = len(self.grams[1][""].keys())
         lambda_char = char_count / (char_count + vocab_len)
-        count = self.grams[1][char]
+        count = self.grams[1][""][char]
 
         return ((lambda_char * count / char_count) + (1-lambda_char)*(1./vocab_len))
 
-    def lambda_compute(self, u, dict_num):
+    def lambda_compute(self, context, dict_num):
         """ Computes lambda value necessary for witten bell smoothing """
         # compute c(u o )
-        scan_dict = self.grams[dict_num]
-        c_u_dot = 0.
-        n_plus_u = 0.
-        for gram, count in scan_dict.items():
-            if gram[0:len(u)] == u:
-                c_u_dot += count ## is this actually supposed to be the count?
-                n_plus_u += 1.
+        if context in self.grams[dict_num].keys():
+            c_u_dot = sum(self.grams[dict_num][context].values())
+            n_plus_u = len(self.grams[dict_num][context].keys())
+        else:
+            c_u_dot  = 0
+            n_plus_u = 0
+
         if (c_u_dot + n_plus_u) == 0:
             lam = 0
         else:
@@ -140,73 +160,17 @@ class Uniform(object):
     # automaton.
     def start(self):
         """Resets the state."""
-        self.state = '`'*(self.ngrams-1)
+        self.state = "`"*(self.ngrams-1)
         return
 
     def read(self, w):
         """Reads in character w, updating the state."""
-        self.state += w
+        self.state = self.state + w
         return
 
     # The following two methods add probabilities to the finite automaton.
 
 
-
-    def prob(self, w):
-        """Returns the probability of the next character being w given the
-        current state."""
-        considered_text = self.state[ (len(self.state) - self.ngrams -1): ]
-        c_u_dot, lam = self.lambda_compute(considered_text,self.ngrams)
-
-        if (considered_text + w) in self.grams[self.ngrams].keys():
-            c_u_w  = self.grams[self.ngrams][considered_text + w]
-        else:
-            c_u_w = 0
-        if c_u_dot != 0:
-            return (lam*c_u_w/c_u_dot) + (1 - lam)*(self.prob_dict[self.ngrams-1][considered_text])
-        else:
-            return (1 - lam)*(self.prob_dict[self.ngrams-1][considered_text])
-
-    def probs(self):
-        """Returns a dict mapping from all characters in the vocabulary to the
-probabilities of each character."""
-        #compute probs of unknown ngrams
-        #for i,ngram_dict in self.grams.items():
-        #   ngram_dict['unk'] = list(ngram_dict.values()).count(1.) / sum(ngram_dict.values())
-        ret_dict = {}
-        for i in range(0,self.ngrams):
-            ret_dict[i+1] = {}
-        self.smooth_one_gram(ret_dict)
-        self.witten_bell_smooth(ret_dict)
-        self.prob_dict = ret_dict
-        return ret_dict
-
-    def smooth_one_gram(self,ret_dict):
-        """Returns smoothed 1-gram model"""
-        char_count = sum(self.grams[1].values())
-        vocab_len = len(self.grams[1].keys())
-        lambda_char = char_count / (char_count + vocab_len)
-        for char, count in self.grams[1].items():
-            
-            char = ''.join(char)
-            ret_dict[1][char] = (lambda_char * count / char_count) + (1 - lambda_char)*(1./vocab_len) 
-        return
-
-    
-    def witten_bell_smooth(self,ret_dict):
-
-        # start with 2-grams and continue upwards
-        # compute lambda
-        for dict_num, count_dict in self.grams.items():
-            
-            if dict_num != 1.:
-                
-                for gram, count in count_dict.items():
-                    # get lambda value - input is all chars besides last char of ngram
-                    c_u_dot,lam = self.lambda_compute(gram[0:len(gram)-1], dict_num)
-                    c_u_w = count
-                    recurse_p_wu = ret_dict[dict_num - 1][''.join(gram[1:])]
-                    ret_dict[dict_num][''.join(gram)] = (lam*c_u_w/c_u_dot) + (1.-lam)*recurse_p_wu
 
 
 
