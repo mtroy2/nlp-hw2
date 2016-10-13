@@ -53,7 +53,7 @@ class Uniform(object):
         ten_pos = dev_set.read(10)
         ten_pos = ten_pos.replace('\n',' ')
         # append start symbols handled in self.start()
-        self.compute(ten_pos, 'dev set ')
+        self.compute(ten_pos, 'dev set ', 't')
         return
     def compute_test(self,filename):
 
@@ -64,13 +64,15 @@ class Uniform(object):
         self.test_file = f_str
         self.compute(f_str, 'test set ')
         return
-    def compute(self,f_string,name):
+    def compute(self,f_string,name, prin = 'f'):
         correct = 0
         incorrect = 0
         for i,char in enumerate(f_string):
             #if char == '\n':
                 #self.start()    
             guess,prob = self.predict()
+            if prin == 't':
+                print('Guess<' + guess + '>, probability<' + str(prob) + '>')
             if guess == char:
                 correct += 1
             else:
@@ -82,14 +84,14 @@ class Uniform(object):
         i_file = open(filename)
         in_str = i_file.read()
         in_str = in_str.replace('\n',' ')
-        in_str = '恩'*(self.ngrams-1)
+        in_str = '恩'*(self.ngrams-1) + in_str
         in_grams = nltk.ngrams(in_str,self.ngrams)
         perp = 0
         summation = 0
         for gram in in_grams:
             char = gram[-1]
-            context = gram[:-1]
-            summation += math.log(self.recursive_smooth(char, context,self.ngrams))
+            context = ''.join(gram[:-1])
+            summation += math.log(self.recurse_smooth(char, context,self.ngrams))
         summation = summation* (-1/len(in_str))
         perp = math.exp(summation)
         print("Perplexity on set is " + str(perp))
@@ -133,7 +135,7 @@ class Uniform(object):
             if char in self.grams[dict_num][context].keys():
                 c_u_w = self.grams[dict_num][context][char]
             else:
-                c_u_w = 0
+                c_u_w = 0.
         else:
             c_u_w = 0
         if len(context) == 1:

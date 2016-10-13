@@ -1,1 +1,13 @@
 Please see http://nd.edu/~dchiang/teaching/nlp/2016/hw2.html for instructions.
+
+To run this program:
+
+command:
+
+    python e_pred.py <train path> <dev path> <test path> <ngrams>
+
+libraries:
+
+    nltk
+
+
